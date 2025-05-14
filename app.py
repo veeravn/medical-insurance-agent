@@ -5,6 +5,9 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain_community.vectorstores import FAISS
 from langchain_openai import AzureOpenAIEmbeddings, AzureChatOpenAI
 from langchain.callbacks.base import BaseCallbackHandler
+from pathlib import Path
+from scripts.load_and_split import load_and_split_docs
+from scripts.embed_and_index import embed_and_index_docs
 
 load_dotenv()
 
@@ -12,6 +15,11 @@ st.set_page_config(page_title="Medical Insurance Assistant", layout="wide")
 st.title("🏥 Medical Insurance RAG Assistant")
 
 VECTORSTORE_PATH = "vectorstore/insurance_faiss"
+
+# Call only if vectorstore doesn't exist
+if not Path("vectorstore/insurance_faiss/index.faiss").exists():
+    load_and_split_docs()
+    embed_and_index_docs()
 
 embedding_model = AzureOpenAIEmbeddings(
     model=os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT"),
