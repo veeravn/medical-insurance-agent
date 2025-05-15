@@ -1,22 +1,28 @@
-def load_and_split_docs():
-    from langchain.document_loaders import PyPDFLoader
-    from langchain.text_splitter import RecursiveCharacterTextSplitter
-    import pickle, os
+import os
+import pickle
+from pathlib import Path
+from langchain.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-    DATA_DIR = "../data"
+def load_and_split_docs():
+    pdf_dir = Path("data")
+    split_dir = Path("temp")
+    split_dir.mkdir(exist_ok=True)
     all_docs = []
 
-    for filename in os.listdir(DATA_DIR):
-        if filename.lower().endswith(".pdf"):
-            path = os.path.join(DATA_DIR, filename)
-            loader = PyPDFLoader(path)
-            documents = loader.load()
-            all_docs.extend(documents)
+    for pdf_file in pdf_dir.glob("*.pdf"):
+        loader = PyPDFLoader(str(pdf_file))
+        docs = loader.load()
+        all_docs.extend(docs)
 
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     split_docs = splitter.split_documents(all_docs)
 
-    os.makedirs("../temp", exist_ok=True)
-    with open("../temp/split_docs.pkl", "wb") as f:
+    with open(split_dir / "split_docs.pkl", "wb") as f:
         pickle.dump(split_docs, f)
-    print("✅ All PDF documents split and saved.")
+
+    with open(split_dir / "timestamp.txt", "w") as f:
+        latest = max([pdf_file.stat().st_mtime for pdf_file in pdf_dir.glob("*.pdf")])
+        f.write(str(int(latest)))
+
+    print("✅ Documents loaded and split.")

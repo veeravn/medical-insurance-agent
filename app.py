@@ -1,39 +1,41 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 import streamlit as st
-from langchain.chains import ConversationalRetrievalChain
-from langchain_community.vectorstores import FAISS
-from langchain_openai import AzureOpenAIEmbeddings, AzureChatOpenAI
 from langchain.callbacks.base import BaseCallbackHandler
-from pathlib import Path
 from scripts.load_and_split import load_and_split_docs
 from scripts.embed_and_index import embed_and_index_docs
+from scripts.agent_factory import create_insurance_agent
 
 load_dotenv()
 
-st.set_page_config(page_title="Medical Insurance Assistant", layout="wide")
-st.title("🏥 Medical Insurance RAG Assistant")
+# Check for updated documents
+VECTORSTORE_PATH = Path("vectorstore/insurance_faiss/index.faiss")
+TIMESTAMP_PATH = Path("temp/timestamp.txt")
+LATEST_PDF = max([f.stat().st_mtime for f in Path("data").glob("*.pdf")], default=0)
 
-VECTORSTORE_PATH = "vectorstore/insurance_faiss"
+NEEDS_REBUILD = not VECTORSTORE_PATH.exists()
+if TIMESTAMP_PATH.exists():
+    with open(TIMESTAMP_PATH) as f:
+        try:
+            saved_ts = int(f.read().strip())
+            if int(LATEST_PDF) > saved_ts:
+                NEEDS_REBUILD = True
+        except:
+            NEEDS_REBUILD = True
+else:
+    NEEDS_REBUILD = True
 
-# Call only if vectorstore doesn't exist
-if not Path("vectorstore/insurance_faiss/index.faiss").exists():
+if NEEDS_REBUILD:
+    print("🔄 Changes detected. Rebuilding index...")
     load_and_split_docs()
     embed_and_index_docs()
+else:
+    print("✅ No changes in PDFs. Using cached vectorstore.")
 
-embedding_model = AzureOpenAIEmbeddings(
-    model=os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT"),
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_version=os.getenv("AZURE_OPENAI_API_VERSION")
-)
-
-vectorstore = FAISS.load_local(
-    VECTORSTORE_PATH,
-    embedding_model,
-    allow_dangerous_deserialization=True
-)
-retriever = vectorstore.as_retriever(search_type="similarity", k=5)
+# Streamlit app
+st.set_page_config(page_title="Medical Insurance Assistant", layout="wide")
+st.title("🏥 Medical Insurance Knowledge Base Agent")
 
 class StreamHandler(BaseCallbackHandler):
     def __init__(self, container):
@@ -47,27 +49,21 @@ class StreamHandler(BaseCallbackHandler):
 response_container = st.empty()
 handler = StreamHandler(response_container)
 
-llm = AzureChatOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
-    deployment_name=os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT"),
-    temperature=0,
-    streaming=True,
-    callbacks=[handler]
-)
-
-qa_chain = ConversationalRetrievalChain.from_llm(
-    llm=llm,
-    retriever=retriever,
-    return_source_documents=True
-)
+agent = create_insurance_agent(streaming=True, callbacks=[handler])
 
 query = st.text_input("Enter your medical insurance question:", "What is covered under emergency hospitalization?")
 
 if st.button("Submit"):
     with st.spinner("Retrieving and generating answer..."):
-        result = qa_chain.invoke({"question": query, "chat_history": []})
-        st.subheader("\n\nSources")
-        for doc in result["source_documents"]:
-            st.markdown(f"- {doc.metadata.get('source', 'Unknown Source')}")
+        raw_response = agent.run(query)
+        response_text, sources = raw_response.split("\n\nSources:\n") if "\n\nSources:\n" in raw_response else (raw_response, "")
+
+        st.subheader("Answer")
+        st.write(response_text.strip())
+
+        if sources:
+            st.subheader("Sources")
+            for line in sources.strip().split("\n"):
+                if line.startswith("- "):
+                    doc = line[2:].strip()
+                    st.markdown(f"- [{doc}](./data/{doc})")

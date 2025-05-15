@@ -1,10 +1,12 @@
-def embed_and_index_docs():
-    import os, pickle, time
-    from dotenv import load_dotenv
-    from langchain_community.vectorstores import FAISS
-    from langchain_openai import AzureOpenAIEmbeddings
+import os
+import pickle
+from dotenv import load_dotenv
+from langchain_community.vectorstores import FAISS
+from langchain_openai import AzureOpenAIEmbeddings
 
-    load_dotenv()
+load_dotenv()
+
+def embed_and_index_docs():
 
     with open("../temp/split_docs.pkl", "rb") as f:
         split_docs = pickle.load(f)
