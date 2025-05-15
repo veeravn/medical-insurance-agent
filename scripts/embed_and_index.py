@@ -1,5 +1,6 @@
 import os
 import pickle
+import time
 from dotenv import load_dotenv
 from langchain_community.vectorstores import FAISS
 from langchain_openai import AzureOpenAIEmbeddings
