@@ -9,7 +9,7 @@ load_dotenv()
 
 def embed_and_index_docs():
 
-    with open("../temp/split_docs.pkl", "rb") as f:
+    with open("./temp/split_docs.pkl", "rb") as f:
         split_docs = pickle.load(f)
 
     embedding_model = AzureOpenAIEmbeddings(
@@ -34,6 +34,6 @@ def embed_and_index_docs():
                 time.sleep(5 * retries)  # exponential backoff
 
     vectorstore = FAISS.from_documents(embedded_docs, embedding_model)
-    os.makedirs("../vectorstore", exist_ok=True)
-    vectorstore.save_local("../vectorstore/insurance_faiss")
+    os.makedirs("./vectorstore", exist_ok=True)
+    vectorstore.save_local("./vectorstore/insurance_faiss")
     print(f"✅ Vector store created with {len(embedded_docs)} embedded chunks.")

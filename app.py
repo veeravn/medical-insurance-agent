@@ -5,7 +5,8 @@ import streamlit as st
 from langchain.callbacks.base import BaseCallbackHandler
 from scripts.load_and_split import load_and_split_docs
 from scripts.embed_and_index import embed_and_index_docs
-from scripts.agent_factory import create_insurance_agent
+from scripts.agent_graph import create_react_agent_with_memory
+from langgraph.graph.message import add_messages
 
 load_dotenv()
 
@@ -49,14 +50,20 @@ class StreamHandler(BaseCallbackHandler):
 response_container = st.empty()
 handler = StreamHandler(response_container)
 
-agent = create_insurance_agent(streaming=True, callbacks=[handler])
+agent = create_react_agent_with_memory(streaming=True, callbacks=[handler])
+
+# Session memory
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
 query = st.text_input("Enter your medical insurance question:", "What is covered under emergency hospitalization?")
 
 if st.button("Submit"):
     with st.spinner("Retrieving and generating answer..."):
-        raw_response = agent.run(query)
-        response_text, sources = raw_response.split("\n\nSources:\n") if "\n\nSources:\n" in raw_response else (raw_response, "")
+        result = agent.invoke({"messages": st.session_state.chat_history + ["user: " + query]})
+        st.session_state.chat_history = add_messages(st.session_state.chat_history, ["user: " + query, "assistant: " + result])
+
+        response_text, sources = result.split("\n\nSources:\n") if "\n\nSources:\n" in result else (result, "")
 
         st.subheader("Answer")
         st.write(response_text.strip())
